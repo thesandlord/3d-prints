@@ -7,7 +7,7 @@ from aio_frame import (
 )
 
 here = os.path.dirname(os.path.abspath(__file__))
-prev = os.path.join(os.path.dirname(here), "preview")
+prev = os.path.join(here, "preview")
 os.makedirs(prev, exist_ok=True)
 
 sf, cb, lk, rl, cl = side_frame(), crossbar(), lock_bar(), rail(), board_clip()

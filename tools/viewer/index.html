@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Preview</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #f4f1ec; overflow: hidden; }
+  canvas { width: 100%; height: 100%; display: block; }
+  #hud {
+    position: fixed; left: 16px; bottom: 14px; font: 14px/1.4 system-ui, sans-serif;
+    color: #333; background: rgba(255,255,255,.86); padding: 8px 12px; border-radius: 8px;
+  }
+  #hud a { color: #333; margin-right: 10px; }
+  #groups a.on { font-weight: 650; text-decoration: none; }
+  #all { display: inline-block; margin-top: 4px; color: #555; margin-right: 0; }
+  #picker { box-sizing: border-box; min-height: 100%; padding: 48px 40px; font: 16px/1.45 system-ui, sans-serif; color: #333; }
+  #picker[hidden] { display: none; }
+  #picker h1 { font-size: 22px; font-weight: 600; margin: 0 0 8px; }
+  #picker p { margin: 0 0 18px; color: #555; }
+  #picker ul { list-style: none; padding: 0; margin: 0; }
+  #picker li { margin: 0 0 16px; }
+  #picker a { color: #333; font-size: 18px; }
+  #picker .meta { display: block; color: #777; font-size: 13px; margin-top: 2px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div id="hint">Drag to orbit. Scroll to zoom.</div>
+  <div id="groups"></div>
+  <a id="all" href="/">All projects</a>
+</div>
+<div id="picker" hidden>
+  <h1>Assemblies</h1>
+  <p>Pick a project. Meshes come from its preview folder.</p>
+  <p id="empty" hidden>No project has a preview folder yet.</p>
+  <ul id="list"></ul>
+</div>
+<script>
+const PALETTE = [
+  [0.878, 0.482, 0.224],
+  [0.290, 0.565, 0.851],
+  [0.878, 0.753, 0.251],
+  [0.45, 0.62, 0.42],
+  [0.55, 0.36, 0.62],
+  [0.75, 0.38, 0.32],
+  [0.28, 0.55, 0.55],
+  [0.62, 0.48, 0.32],
+];
+const FOV = 0.7;
+const params = new URLSearchParams(location.search);
+const project = params.get("project");
+
+const canvas = document.getElementById("c");
+const hud = document.getElementById("hud");
+const hint = document.getElementById("hint");
+const picker = document.getElementById("picker");
+
+function fail(message) {
+  hint.textContent = message;
+  hud.style.display = "block";
+}
+
+function num(value, fallback) {
+  return typeof value === "number" && isFinite(value) ? value : fallback;
+}
+
+function vec3(value) {
+  if (!Array.isArray(value) || value.length < 3) return null;
+  const v = [Number(value[0]), Number(value[1]), Number(value[2])];
+  return v.every(isFinite) ? v : null;
+}
+
+function hashColor(key) {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 33 + key.charCodeAt(i)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+
+function family(stem, prefix) {
+  let name = stem;
+  if (prefix && name.startsWith(prefix)) name = name.slice(prefix.length);
+  return name.replace(/(_\d+)+$/, "") || name;
+}
+
+function colorFor(key, table) {
+  if (table && Array.isArray(table[key]) && table[key].length >= 3) {
+    return [table[key][0], table[key][1], table[key][2]];
+  }
+  let best = "";
+  if (table) {
+    for (const candidate of Object.keys(table)) {
+      if (key.startsWith(candidate + "_") && candidate.length > best.length && Array.isArray(table[candidate])) {
+        best = candidate;
+      }
+    }
+  }
+  if (best) return [table[best][0], table[best][1], table[best][2]];
+  return hashColor(key);
+}
+
+function groupState(manifest) {
+  const groups = manifest.groups;
+  const names = groups && typeof groups === "object"
+    ? Object.keys(groups).filter(key => typeof groups[key] === "string")
+    : [];
+  const viewName = params.get("view");
+  let asked = params.get("group");
+  if (!asked && viewName && names.includes(viewName)) asked = viewName;
+  if (!names.length) return { prefix: params.get("prefix") || "", active: null, names };
+  if (asked === "all") return { prefix: "", active: "all", names };
+  if (asked && !Object.prototype.hasOwnProperty.call(groups, asked)) {
+    throw new Error("Unknown group " + asked);
+  }
+  const active = asked || (names.includes(manifest.defaultGroup) ? manifest.defaultGroup : names[0]);
+  return { prefix: groups[active], active, names };
+}
+
+function parseSTL(buf, tilt) {
+  const dv = new DataView(buf);
+  const n = dv.getUint32(80, true);
+  if (n < 1 || 84 + n * 50 > buf.byteLength) throw new Error("not a binary STL");
+  const ct = Math.cos(tilt), st = Math.sin(tilt);
+  const pos = new Float32Array(n * 9);
+  const norm = new Float32Array(n * 9);
+  let o = 84;
+  for (let i = 0; i < n; i++) {
+    o += 12;
+    const vs = [];
+    for (let k = 0; k < 3; k++) {
+      const x = dv.getFloat32(o, true);
+      const y = dv.getFloat32(o + 4, true);
+      const z = dv.getFloat32(o + 8, true);
+      o += 12;
+      vs.push(x, y * ct - z * st, y * st + z * ct);
+    }
+    const ax = vs[3] - vs[0], ay = vs[4] - vs[1], az = vs[5] - vs[2];
+    const bx = vs[6] - vs[0], by = vs[7] - vs[1], bz = vs[8] - vs[2];
+    let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+    const len = Math.hypot(nx, ny, nz) || 1;
+    nx /= len; ny /= len; nz /= len;
+    for (let k = 0; k < 3; k++) {
+      pos[i * 9 + k * 3] = vs[k * 3];
+      pos[i * 9 + k * 3 + 1] = vs[k * 3 + 1];
+      pos[i * 9 + k * 3 + 2] = vs[k * 3 + 2];
+      norm[i * 9 + k * 3] = nx;
+      norm[i * 9 + k * 3 + 1] = ny;
+      norm[i * 9 + k * 3 + 2] = nz;
+    }
+    o += 2;
+  }
+  return { pos, norm };
+}
+
+if (!project) {
+  canvas.style.display = "none";
+  hud.style.display = "none";
+  picker.hidden = false;
+  fetch("/api/projects").then(r => r.json()).then(items => {
+    if (!items.length) {
+      document.getElementById("empty").hidden = false;
+      return;
+    }
+    const list = document.getElementById("list");
+    for (const item of items) {
+      const li = document.createElement("li");
+      const link = document.createElement("a");
+      link.href = "/?project=" + encodeURIComponent(item.name);
+      link.textContent = item.title || item.name;
+      li.appendChild(link);
+      const bits = [];
+      if (item.title && item.title !== item.name) bits.push(item.name);
+      if (item.groups && item.groups.length) bits.push(item.groups.join(" · "));
+      if (bits.length) {
+        const meta = document.createElement("span");
+        meta.className = "meta";
+        meta.textContent = bits.join(" — ");
+        li.appendChild(meta);
+      }
+      list.appendChild(li);
+    }
+  }).catch(err => {
+    picker.hidden = true;
+    canvas.style.display = "none";
+    fail(err.message);
+  });
+} else if (params.get("clean")) {
+  hud.style.display = "none";
+}
+
+async function load(name) {
+  const res = await fetch("/api/project/" + encodeURIComponent(name));
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "could not open " + name);
+  const manifest = data.manifest || {};
+  document.title = manifest.title || name;
+  if (!params.get("clean")) hint.textContent = manifest.hud || "Drag to orbit. Scroll to zoom.";
+
+  const grouping = groupState(manifest);
+  if (!params.get("clean") && grouping.names.length > 1) {
+    const bar = document.getElementById("groups");
+    for (const group of grouping.names) {
+      const link = document.createElement("a");
+      const query = new URLSearchParams(location.search);
+      query.set("group", group);
+      link.href = "/?" + query.toString();
+      link.textContent = group;
+      if (group === grouping.active) link.className = "on";
+      bar.appendChild(link);
+    }
+  }
+
+  let stems = data.files.map(file => file.replace(/\.stl$/i, ""));
+  if (grouping.prefix) stems = stems.filter(stem => stem.startsWith(grouping.prefix));
+  if (!stems.length) throw new Error("No meshes in preview/");
+
+  const tilt = num(manifest.tilt, 0) * Math.PI / 180;
+  const cam = manifest.camera || {};
+  const views = manifest.views || {};
+  const viewKey = params.get("view") || (views[params.get("group")] ? params.get("group") : null);
+  const view = views[viewKey] || {};
+  let yaw = num(view.yaw, num(cam.yaw, 0.8));
+  let pitch = num(view.pitch, num(cam.pitch, 0.4));
+  let dist = view.dist != null ? num(view.dist, null) : (cam.dist != null ? num(cam.dist, null) : null);
+  const centerOverride = vec3(view.center) || vec3(cam.center);
+
+  const gl = canvas.getContext("webgl", { antialias: true, preserveDrawingBuffer: true });
+  const vs = `attribute vec3 aPos; attribute vec3 aNrm;
+uniform mat4 uP, uV, uM; varying vec3 vN; varying vec3 vW;
+void main() { vec4 w = uM * vec4(aPos, 1.0); vW = w.xyz; vN = mat3(uM) * aNrm;
+  gl_Position = uP * uV * w; }`;
+  const fs = `precision mediump float; varying vec3 vN; varying vec3 vW;
+uniform vec3 uColor; uniform vec3 uEye;
+void main() {
+  vec3 n = normalize(vN);
+  vec3 l = normalize(vec3(0.35, 0.85, 0.25));
+  float d = abs(dot(n, l));
+  float f = pow(max(dot(normalize(uEye - vW), reflect(-l, n)), 0.0), 24.0);
+  gl_FragColor = vec4(uColor * (0.38 + 0.62 * d) + f * 0.18, 1.0);
+}`;
+  function sh(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const loc = {
+    aPos: gl.getAttribLocation(prog, "aPos"), aNrm: gl.getAttribLocation(prog, "aNrm"),
+    uP: gl.getUniformLocation(prog, "uP"), uV: gl.getUniformLocation(prog, "uV"),
+    uM: gl.getUniformLocation(prog, "uM"), uColor: gl.getUniformLocation(prog, "uColor"),
+    uEye: gl.getUniformLocation(prog, "uEye"),
+  };
+
+  function persp(fovy, aspect, near, far) {
+    const t = 1 / Math.tan(fovy / 2), nf = 1 / (near - far), o = new Float32Array(16);
+    o[0] = t / aspect; o[5] = t; o[10] = (far + near) * nf; o[11] = -1; o[14] = 2 * far * near * nf;
+    return o;
+  }
+  function look(eye, at, up) {
+    const zx = eye[0] - at[0], zy = eye[1] - at[1], zz = eye[2] - at[2];
+    let zl = Math.hypot(zx, zy, zz) || 1;
+    const z0 = zx / zl, z1 = zy / zl, z2 = zz / zl;
+    let xx = up[1] * z2 - up[2] * z1, xy = up[2] * z0 - up[0] * z2, xz = up[0] * z1 - up[1] * z0;
+    let xl = Math.hypot(xx, xy, xz) || 1;
+    xx /= xl; xy /= xl; xz /= xl;
+    const yx = z1 * xz - z2 * xy, yy = z2 * xx - z0 * xz, yz = z0 * xy - z1 * xx;
+    return new Float32Array([
+      xx, yx, z0, 0, xy, yy, z1, 0, xz, yz, z2, 0,
+      -(xx * eye[0] + xy * eye[1] + xz * eye[2]),
+      -(yx * eye[0] + yy * eye[1] + yz * eye[2]),
+      -(z0 * eye[0] + z1 * eye[1] + z2 * eye[2]), 1,
+    ]);
+  }
+
+  const meshes = [];
+  let center = [0, 0, 0];
+  function eye() {
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    return [
+      center[0] + dist * cp * Math.sin(yaw),
+      center[1] + dist * sp,
+      center[2] + dist * cp * Math.cos(yaw),
+    ];
+  }
+
+  let drag = null;
+  canvas.addEventListener("pointerdown", e => {
+    drag = { x: e.clientX, y: e.clientY, yaw, pitch };
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointermove", e => {
+    if (!drag) return;
+    yaw = drag.yaw - (e.clientX - drag.x) * 0.008;
+    pitch = Math.max(-0.2, Math.min(1.2, drag.pitch + (e.clientY - drag.y) * 0.008));
+  });
+  canvas.addEventListener("pointerup", () => { drag = null; });
+  canvas.addEventListener("wheel", e => {
+    dist = Math.max(20, Math.min(20000, dist * (e.deltaY > 0 ? 1.08 : 0.92)));
+    e.preventDefault();
+  }, { passive: false });
+
+  function draw() {
+    const w = canvas.width = canvas.clientWidth * devicePixelRatio;
+    const h = canvas.height = canvas.clientHeight * devicePixelRatio;
+    gl.viewport(0, 0, w, h);
+    gl.clearColor(0.957, 0.945, 0.925, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+    const e = eye();
+    gl.uniformMatrix4fv(loc.uP, false, persp(FOV, w / h, 2, 8000));
+    gl.uniformMatrix4fv(loc.uV, false, look(e, center, [0, 1, 0]));
+    gl.uniform3fv(loc.uEye, e);
+    gl.uniformMatrix4fv(loc.uM, false, new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]));
+    for (const mesh of meshes) {
+      gl.uniform3fv(loc.uColor, mesh.color);
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.pb);
+      gl.enableVertexAttribArray(loc.aPos);
+      gl.vertexAttribPointer(loc.aPos, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.nb);
+      gl.enableVertexAttribArray(loc.aNrm);
+      gl.vertexAttribPointer(loc.aNrm, 3, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
+    }
+    requestAnimationFrame(draw);
+  }
+
+  const bufs = await Promise.all(stems.map(async stem => {
+    const response = await fetch("/mesh/" + encodeURIComponent(name) + "/" + encodeURIComponent(stem + ".stl"));
+    if (!response.ok) throw new Error("missing " + stem + ".stl");
+    return response.arrayBuffer();
+  }));
+
+  let min = [1e9, 1e9, 1e9], max = [-1e9, -1e9, -1e9];
+  bufs.forEach((buf, i) => {
+    const geometry = parseSTL(buf, tilt);
+    for (let k = 0; k < geometry.pos.length; k += 3) {
+      min[0] = Math.min(min[0], geometry.pos[k]); max[0] = Math.max(max[0], geometry.pos[k]);
+      min[1] = Math.min(min[1], geometry.pos[k + 1]); max[1] = Math.max(max[1], geometry.pos[k + 1]);
+      min[2] = Math.min(min[2], geometry.pos[k + 2]); max[2] = Math.max(max[2], geometry.pos[k + 2]);
+    }
+    const pb = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, pb);
+    gl.bufferData(gl.ARRAY_BUFFER, geometry.pos, gl.STATIC_DRAW);
+    const nb = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, nb);
+    gl.bufferData(gl.ARRAY_BUFFER, geometry.norm, gl.STATIC_DRAW);
+    meshes.push({
+      pb, nb,
+      count: geometry.pos.length / 3,
+      color: colorFor(family(stems[i], grouping.prefix), manifest.colors),
+    });
+  });
+  center = centerOverride || [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
+  if (dist == null) {
+    const spanX = max[0] - min[0], spanY = max[1] - min[1], spanZ = max[2] - min[2];
+    const aspect = canvas.clientWidth / canvas.clientHeight || 1.6;
+    const half = Math.tan(FOV / 2);
+    const distY = (spanY * 0.5) / half;
+    const distX = (Math.max(spanX, spanZ) * 0.5) / half / aspect;
+    dist = Math.max(distX, distY, 20) * 1.45;
+  }
+  document.body.dataset.ready = "1";
+  draw();
+}
+
+if (project) {
+  load(project).catch(err => fail(err.message));
+}
+</script>
+</body>
+</html>
