@@ -1,10 +1,11 @@
 {
   "title": "Smock dryer",
-  "hud": "Up is the stand. Pack is the hanger and the feet inside the lower tube.",
-  "camera": {"yaw": 0.6, "pitch": 0.35, "dist": 1100},
+  "hud": "Up is the stand. Pack is the slim tube slid into the wide one. Print shows the snap-off feet.",
+  "camera": {"yaw": 0.6, "pitch": 0.35, "dist": 1200},
   "groups": {
     "up": "up_",
-    "pack": "pack_"
+    "pack": "pack_",
+    "print": "print_"
   },
   "defaultGroup": "up",
   "colors": {
@@ -13,8 +14,11 @@
     "foot": [0.78, 0.32, 0.26]
   },
   "views": {
-    "up": {"yaw": 0.7, "pitch": 0.28, "dist": 1200},
-    "pack": {"yaw": 0.5, "pitch": 0.45, "dist": 700},
-    "top": {"yaw": 0.4, "pitch": 1.05, "dist": 280, "center": [0, 400, 0]}
+    "up": {"yaw": 0.7, "pitch": 0.28, "dist": 1400},
+    "pack": {"yaw": 0.55, "pitch": 0.35, "dist": 900},
+    "joint": {"yaw": 0.9, "pitch": 0.15, "dist": 420, "center": [0, 230, 0]},
+    "print": {"yaw": 0.8, "pitch": 0.2, "dist": 1100},
+    "base": {"yaw": 1.1, "pitch": 0.35, "dist": 220, "center": [0, 18, 0]},
+    "top": {"yaw": 0.4, "pitch": 1.05, "dist": 320, "center": [0, 450, 0]}
   }
 }
