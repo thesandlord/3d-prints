@@ -1,20 +1,17 @@
 {
   "title": "Open frame",
-  "hud": "Drag to orbit. Scroll to zoom. The dark slab is the panel.",
+  "hud": "Drag to orbit. Scroll to zoom. The dark slab is the panel. The two bars on the feet are the rails.",
   "tilt": 12,
-  "camera": {"yaw": 2.4, "pitch": 0.38, "dist": 820},
+  "camera": {"yaw": 0.7, "pitch": 0.38, "dist": 780},
   "colors": {
     "side_frame": [0.878, 0.482, 0.224],
-    "crossbar": [0.290, 0.565, 0.851],
-    "rail": [0.878, 0.753, 0.251],
-    "lock": [0.35, 0.35, 0.38],
-    "clip": [0.45, 0.62, 0.42],
+    "bottom_rail": [0.36, 0.62, 0.58],
     "panel": [0.12, 0.12, 0.13]
   },
   "views": {
     "front": {"yaw": 2.55, "pitch": 0.32, "dist": 860},
-    "back": {"yaw": 0.55, "pitch": 0.42, "dist": 780},
-    "side": {"yaw": -1.35, "pitch": 0.22, "dist": 900},
-    "joint": {"yaw": 0.9, "pitch": 0.35, "dist": 340, "center": [110, 20, 30]}
+    "back": {"yaw": 0.45, "pitch": 0.48, "dist": 740},
+    "side": {"yaw": -1.35, "pitch": 0.16, "dist": 900},
+    "rails": {"yaw": 0.6, "pitch": 0.2, "dist": 460, "center": [0, -95, 75]}
   }
 }

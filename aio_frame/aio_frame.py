@@ -1,13 +1,13 @@
 """
-Open-frame stand for a 15.6" panel + LCD driver + SBC. Everything is printed.
+Open-frame stand for a 15.6" panel + LCD driver + SBC.
 
-Two side frames, two crossbars, four lock bars, three rails, six board clips.
-Each crossbar drops into a socket on both frames. A thumb-sized lock bar slides
-through the socket and stops the bar lifting out. Rails snap onto the crossbars.
-Board clips slide on the rails and grip a PCB edge.
+The side frames are already printed. The only new parts are two bottom rails.
+Each rail presses onto the foot of both frames and carries a grid of M3
+through holes, so boards screw down onto the rails.
 
 Coordinates (assembly): X = width, Y = up the panel, Z = depth (Z=0 = panel front).
-Millimetres.  /tmp/cqenv/bin/python aio_frame.py
+The rails are built on the floor (world Y up, world Z back) and rotated into
+this frame. Millimetres.  /tmp/cqenv/bin/python aio_frame.py
 """
 import math, os
 import cadquery as cq
@@ -37,6 +37,25 @@ BUMP = 1.3
 BOSS_HY = 14.0
 # Boss grows to one side of the 12 mm plate so that face sits on the bed.
 BOSS_X0, BOSS_X1 = -FRAME_T / 2 - 14.0, FRAME_T / 2
+
+# Bottom rails, the only parts still to print. Sockets press onto the foot sole,
+# which is the 12 mm plate under the lightening hole (8 mm tall).
+SOLE_H = 8.0
+BAR_T = 8.0
+RAIL_V = 9.0              # half-width along the foot
+CHEEK_CLEAR = 1.0         # socket stops this far above the floor
+CHANNEL = 12.3            # 0.3 mm loose on the plate; the ribs make the press
+# 238 mm overall, inside the 359.5 mm panel, so the rail cannot stop the screen seating.
+RAIL_LEN = 238.0
+CHEEK_T = RAIL_LEN / 2 - FRAME_X - CHANNEL / 2
+RIB = 0.40                # rib thickness where the rail is fully seated
+RIB_W = 0.8
+FLARE = 1.3               # mouth wider than the plate, so it starts by hand
+FLARE_H = 2.4
+HOLE_D = 3.4              # M3 clearance
+HOLE_PITCH = 8.0
+HOLE_ROW = 4.5            # the two hole rows sit this far off the rail centre
+RAIL_B = (50.0, 105.0)    # preview positions, mm back along the foot
 
 # ----------------------------------------------------------------- DERIVED
 GAP = PT + FOAM
@@ -129,100 +148,88 @@ def side_frame():
     return s
 
 
-def crossbar():
-    """Straight beam. Notch at each frame lets the lock pass; a pocket locates the rib.
-    Built at y=0. Translate by CROSSBAR_Y to assemble."""
-    s = box(-BEAM_HX, BEAM_HX, -BEAM_HY, BEAM_HY, BEAM_Z0, BEAM_Z1)
+def floor_height():
+    """World height of the foot sole. The side-frame profile is built so this edge is flat."""
+    yb = -YT - HOOK_WALL
+    return min(h2w(yb, z)[1] for z in (-LIP_T, ZS1))
+
+
+def _wp(solid):
+    return cq.Workplane("XY").newObject([solid])
+
+
+def _cyl_y(x, z, y0, y1, radius):
+    return cq.Solid.makeCylinder(radius, y1 - y0, cq.Vector(x, y0, z), cq.Vector(0, 1, 0))
+
+
+def _prism(pts, z0, z1):
+    solid = cq.Workplane("XY").polyline(list(pts)).close().extrude(z1 - z0)
+    return solid.translate((0, 0, z0))
+
+
+def _hole_xs(offset):
+    xs = []
+    x = -96.0 + offset
+    while x <= 96.0 - offset + 0.01:
+        xs.append(x)
+        x += HOLE_PITCH
+    return xs
+
+
+def bottom_rail_world(b_center, ribs=True):
+    """Rail in floor coordinates: X across, Y up, Z back along the foot.
+
+    The bar sits on the sole. Cheeks hang down either side of the 12 mm plate.
+    Wedge ribs thicken toward the sole, so the socket starts loose and presses
+    as it seats. Holes run through the bar on an 8 mm grid, the two rows
+    staggered by half a pitch.
+    """
+    hd = floor_height()
+    z0, z1 = b_center - RAIL_V, b_center + RAIL_V
+    y_cheek = hd + CHEEK_CLEAR
+    y_sole = hd + SOLE_H
+    y_top = y_sole + BAR_T
+    half = CHANNEL / 2.0
+    outer = half + CHEEK_T
+
+    s = box(-FRAME_X - outer, FRAME_X + outer, y_sole, y_top, z0, z1)
+    flares = []
+    rib_solids = []
     for xc in (-FRAME_X, FRAME_X):
-        s = s.cut(box(xc + BOSS_X0 - 0.5, xc + BOSS_X1 + 0.5,
-                      LOCK_Y - HOLE_Y / 2 - 0.35, BEAM_HY + 1,
-                      PIN_Z - HOLE_Z / 2 - 0.4, PIN_Z + HOLE_Z / 2 + 0.4))
-        s = s.cut(box(xc - 4.6, xc + 4.6, -BEAM_HY - 1, -BEAM_HY + 3.3,
-                      PIN_Z - 3.5, PIN_Z + 3.5))
-    # rail detents, clear of the sockets
-    for x in range(-90, 91, 18):
-        s = s.cut(box(x - 5.5, x + 5.5, BEAM_HY - 1.4, BEAM_HY + 1,
-                      BEAM_Z0 + 3, BEAM_Z1 - 3))
+        for sign in (-1, 1):
+            face = xc + sign * half
+            cheek_a, cheek_b = sorted((face, face + sign * CHEEK_T))
+            s = s.union(box(cheek_a, cheek_b, y_cheek, y_top, z0, z1))
+            flares.append(_prism(
+                [(face, y_cheek),
+                 (face + sign * FLARE, y_cheek),
+                 (face, y_cheek + FLARE_H)],
+                z0, z1))
+            if ribs:
+                y_rib0 = y_cheek + FLARE_H + 0.4
+                y_rib1 = y_sole - 0.4
+                tip = face - sign * RIB
+                for zv in (-5.5, 0.0, 5.5):
+                    rib_solids.append(_prism(
+                        [(face, y_rib0), (face, y_rib1), (tip, y_rib1)],
+                        b_center + zv - RIB_W / 2, b_center + zv + RIB_W / 2))
+    if rib_solids:
+        s = s.union(_wp(cq.Compound.makeCompound([r.val() for r in rib_solids])))
+    s = s.cut(_wp(cq.Compound.makeCompound([f.val() for f in flares])))
+
+    holes = []
+    radius = HOLE_D / 2
+    for x in _hole_xs(0.0):
+        holes.append(_cyl_y(x, b_center - HOLE_ROW, y_sole - 0.6, y_top + 0.6, radius))
+    for x in _hole_xs(HOLE_PITCH / 2):
+        holes.append(_cyl_y(x, b_center + HOLE_ROW, y_sole - 0.6, y_top + 0.6, radius))
+    s = s.cut(_wp(cq.Compound.makeCompound(holes)))
     return s
 
 
-def lock_bar():
-    """Solid bar with a ramp on top. The shaft bows as the ramp passes the hole,
-    then the step at the back of the ramp catches the inner face.
-    Bottom face is flat. Prints with the ramp on top. No floating finger."""
-    y0 = -BAR_Y / 2
-    boss_w = BOSS_X1 - BOSS_X0
-    exit_x = 8.0 + boss_w
-    shaft_x1 = exit_x + 14.0
-    head = box(0, 8, y0, y0 + 12, -9, 9)
-    shaft = box(8, shaft_x1, y0, y0 + BAR_Y, -BAR_Z / 2, BAR_Z / 2)
-    ramp = (cq.Workplane("XY")
-            .polyline([(exit_x + 0.3, y0 + BAR_Y),
-                       (exit_x + 0.3, y0 + BAR_Y + BUMP),
-                       (exit_x + 0.3 + BUMP + 3.5, y0 + BAR_Y)])
-            .close().extrude(BAR_Z - 2, both=True))
-    s = head.union(shaft).union(ramp)
-    s = s.cut(box(shaft_x1 - 2.2, shaft_x1 + 1, y0 - 1, y0 + BAR_Y + BUMP + 1, -BAR_Z, BAR_Z)
-              .rotate((shaft_x1 - 2.2, y0 + BAR_Y / 2, BAR_Z / 2),
-                      (shaft_x1 - 1.2, y0 + BAR_Y / 2, BAR_Z / 2), 30))
-    s = s.cut(box(shaft_x1 - 2.2, shaft_x1 + 1, y0 - 1, y0 + BAR_Y + BUMP + 1, -BAR_Z, BAR_Z)
-              .rotate((shaft_x1 - 2.2, y0 + BAR_Y / 2, -BAR_Z / 2),
-                      (shaft_x1 - 1.2, y0 + BAR_Y / 2, -BAR_Z / 2), -30))
-    return s
-
-
-def _saddle(cy):
-    """Snap over the beam from behind. Lips are 45 degrees so they print and spring open."""
-    arm = 2.8
-    outer = BEAM_HY + 0.5 + arm
-    z_lip = BEAM_Z0 - 2.2
-    z_back = BEAM_Z1 + 5.0
-    block = box(-8, 8, cy - outer, cy + outer, z_lip, z_back)
-    block = block.cut(box(-9, 9, cy - BEAM_HY - 0.5, cy + BEAM_HY + 0.5, z_lip - 1, BEAM_Z1 + 0.35))
-    # 45 degree lips in front of the beam. Throat is ~1 mm tighter than the beam per side.
-    for i in range(2):
-        inset = 0.6 * (i + 1)
-        za, zb = z_lip + 0.7 * i, min(BEAM_Z0 - 0.25, z_lip + 0.7 * (i + 1))
-        for side in (-1, 1):
-            y_wall = cy + side * (BEAM_HY + 0.5)
-            ya, yb = sorted((y_wall, y_wall - side * inset))
-            block = block.union(box(-8, 8, ya, yb, za, zb))
-    # detent tooth in the top arm, sitting in a beam notch (does not bite solid plastic)
-    block = block.union(box(-2.4, 2.4, cy + BEAM_HY - 1.2, cy + BEAM_HY + 0.4,
-                            BEAM_Z0 + 4, BEAM_Z1 - 4))
-    return block
-
-
-def rail():
-    y0, y1 = CROSSBAR_Y[0] - 34, CROSSBAR_Y[1] + 34
-    back0, back1 = BEAM_Z1 + 0.6, BEAM_Z1 + 5.0
-    body = box(-7, 7, y0, y1, back0, back1)
-    stem = box(-2.3, 2.3, y0, y1, back1, back1 + 3.0)
-    cap = box(-6.0, 6.0, y0, y1, back1 + 3.0, back1 + 5.8)
-    for y in range(int(y0) + 10, int(y1) - 6, 12):
-        cap = cap.cut(box(4.5, 7.2, y, y + 5.0, back1 + 2.6, back1 + 6.2))
-    s = body.union(stem).union(cap)
-    for cy in CROSSBAR_Y:
-        s = s.union(_saddle(cy))
-    return s
-
-
-def board_clip():
-    """Print orientation. Groove on the bottom fits the rail cap. Slot grips the board edge."""
-    cap_w, cap_t, stem_w, stem_l = 6.0, 2.8, 2.3, 3.0
-    c = 0.45
-    body = box(-11, 11, -9, 13, 0, 16)
-    body = body.cut(box(-(cap_w + c), cap_w + c, -10, 14, -0.2, cap_t + c))
-    body = body.cut(box(-(stem_w + c), stem_w + c, -10, 14, -0.2, cap_t + stem_l + c))
-    # 2.4 mm slot, open both sides, for a 1.2–2.0 mm board
-    body = body.cut(box(-12, 12, -1.2, 1.2, 8.0, 16.2))
-    body = body.union(box(cap_w - 0.3, cap_w + 1.4, 3, 7, cap_t + 0.3, cap_t + 2.2))
-    return body
-
-
-def lay_up(s):
-    """Assembly +Y (the open side of notches and the lock bump) becomes print +Z."""
-    return to_origin(s.rotate((0, 0, 0), (1, 0, 0), 90))
+def bottom_rail(b_center, ribs=True):
+    """Assembly coordinates, same frame as the side frames."""
+    return bottom_rail_world(b_center, ribs=ribs).rotate((0, 0, 0), (1, 0, 0), -TILT)
 
 
 def lay_frame(s):
@@ -231,11 +238,14 @@ def lay_frame(s):
     return to_origin(s)
 
 
-def lay_rail(s):
-    """Saddle opening up, back of the rail on the bed."""
-    s = s.rotate((0, 0, 0), (1, 0, 0), 180)
-    s = s.rotate((0, 0, 0), (0, 0, 1), 90)
-    return to_origin(s)
+def lay_bottom_rail(world):
+    """Mounting face on the bed, socket cheeks pointing up, holes vertical."""
+    return to_origin(world.rotate((0, 0, 0), (1, 0, 0), -90))
+
+
+def place_rail(world, b_center):
+    """A rail built at Z=0, shifted along the foot, then turned into assembly coordinates."""
+    return world.translate((0, 0, b_center)).rotate((0, 0, 0), (1, 0, 0), -TILT)
 
 
 def _inside(solid, p):
@@ -254,49 +264,107 @@ def _report(name, solid):
           f"vol={solid.val().Volume()/1000:6.1f} cm3  valid={solid.val().isValid()}")
 
 
-if __name__ == "__main__":
+def _at(x, u, b):
+    y, z = w2h(b, floor_height() + u)
+    return (x, y, z)
+
+
+def _expect(cond, msg):
+    if not cond:
+        raise SystemExit("check failed: " + msg)
+
+
+def _check(frame, world, rails):
+    hd = floor_height()
+    bb = world.val().BoundingBox()
+    _expect(abs(bb.ymin - (hd + CHEEK_CLEAR)) < 0.05, f"cheek tip {bb.ymin}")
+    _expect(abs(bb.ymax - (hd + SOLE_H + BAR_T)) < 0.05, f"bar top {bb.ymax}")
+    _expect(abs(bb.zlen - 2 * RAIL_V) < 0.05, f"width {bb.zlen}")
+    _expect(abs(bb.xlen - RAIL_LEN) < 0.15, f"length {bb.xlen:.2f}, want {RAIL_LEN}")
+    _expect(bb.xlen < PW - 40, f"rail {bb.xlen:.1f} is too close to the {PW:.1f} mm panel")
+
+    laid = lay_bottom_rail(world)
+    lb = laid.val().BoundingBox()
+    _report("bottom_rail", laid)
+    _expect(lb.zlen < 16 and lb.ylen < 20 and lb.xlen < 250, "print orientation")
+    mid = (lb.xmin + lb.xlen / 2, lb.ymin + lb.ylen / 2)
+    _expect(_inside(laid, (mid[0], mid[1], 0.4)), "mounting face not on the bed")
+    _expect(not _inside(laid, (mid[0], mid[1], 12.0)), "span should be open above the bar")
+
+    n_holes = len(_hole_xs(0.0)) + len(_hole_xs(HOLE_PITCH / 2))
+    print(f"holes {n_holes}   print {lb.xlen:.1f} x {lb.ylen:.1f} x {lb.zlen:.1f}")
+
+    frames = [frame.translate((x, 0, 0)) for x in (-FRAME_X, FRAME_X)]
+    b = RAIL_B[0]
+    rail = rails[0]
+    # Ribs bite the plate. The mouth and the side clearance stay open.
+    _expect(_inside(rail, _at(-115.90, 7.4, b)) and _inside(frames[0], _at(-115.90, 7.4, b)),
+            "left rib does not bite")
+    _expect(_inside(rail, _at(115.90, 7.4, b)) and _inside(frames[1], _at(115.90, 7.4, b)),
+            "right rib does not bite")
+    gap = _at(-116.05, 5.0, b + 2.0)
+    _expect(not _inside(rail, gap) and not _inside(frames[0], gap), "clearance gap is blocked")
+    _expect(_inside(rail, _at(-FRAME_X, 12.0, b)) and not _inside(frames[0], _at(-FRAME_X, 12.0, b)),
+            "bar collides with the frame above the sole")
+    _expect(_inside(rail, _at(-118.0, 4.0, b)) and not _inside(frames[0], _at(-118.0, 4.0, b)),
+            "cheek missing")
+    _expect(not _inside(rail, _at(-117.0, 1.3, b)), "mouth is not open")
+    _expect(not _inside(rail, _at(-118.0, 0.4, b)), "cheek reaches the floor")
+    _expect(not _inside(rail, _at(0.0, 12.0, b - HOLE_ROW)), "hole missing")
+    _expect(_inside(rail, _at(4.0, 12.0, b - HOLE_ROW)), "bar missing between holes")
+    _expect(not _inside(rail, _at(-92.0, 12.0, b + HOLE_ROW)), "staggered hole missing")
+
+    for i, one in enumerate(rails):
+        for j, fr in enumerate(frames):
+            hit = _hit(one, fr)
+            print(f"rail{i} x frame{j}  {hit:7.2f} mm3")
+            _expect(0.2 < hit < 40, f"rail{i} frame{j} intersection {hit:.1f}")
+    _expect(_hit(rails[0], rails[1]) < 0.1, "rails intersect")
+    _expect(laid.val().isValid() and frame.val().isValid(), "invalid solid")
+
+
+def write_outputs():
     here = os.path.dirname(os.path.abspath(__file__))
     out, prev = os.path.join(here, "stl"), os.path.join(here, "preview")
     os.makedirs(out, exist_ok=True)
     os.makedirs(prev, exist_ok=True)
 
-    sf, cb, lk, rl, cl = side_frame(), crossbar(), lock_bar(), rail(), board_clip()
-    print(f"beam z {BEAM_Z0:.1f}-{BEAM_Z1:.1f}  lock y {LOCK_Y:.1f}  pin z {PIN_Z:.1f}")
+    frame = side_frame()
+    world = bottom_rail_world(0.0)
+    rails = [place_rail(world, b) for b in RAIL_B]
+    _check(frame, world, rails)
 
-    # joint probes. Void where a part must pass, solid where it must catch.
-    print("beam in socket (want void)", _inside(sf, (0, CROSSBAR_Y[0], PIN_Z)))
-    print("rib solid", _inside(sf, (0, CROSSBAR_Y[0] - BEAM_HY + 1.2, PIN_Z)))
-    print("lock hole void", _inside(sf, (10, CROSSBAR_Y[0] + LOCK_Y, PIN_Z)))
-    print("pocket void", not _inside(cb, (FRAME_X, -BEAM_HY + 1.0, PIN_Z)))
-    print("shelf under lock", _inside(cb, (FRAME_X, -4.0, PIN_Z)))
-    print("notch void", not _inside(cb, (FRAME_X, LOCK_Y, PIN_Z)))
-
-    frames = [sf.translate((x, 0, 0)) for x in (-FRAME_X, FRAME_X)]
-    bars = [cb.translate((0, y, 0)) for y in CROSSBAR_Y]
-    for fi, f in enumerate(frames):
-        for bi, b in enumerate(bars):
-            print(f"frame{fi} x bar{bi}  {_hit(f, b):7.1f} mm3")
-    print(f"rail x lower bar {_hit(rl, bars[0]):7.1f} mm3")
-
-    parts = {
-        "side_frame": lay_frame(sf),
-        "crossbar": lay_up(cb),
-        "lock": to_origin(lay_up(lk).rotate((0, 0, 0), (0, 0, 1), 90)),
-        "rail": lay_rail(rl),
-        "board_clip": to_origin(cl),
+    prints = {
+        "side_frame": lay_frame(frame),
+        "bottom_rail": lay_bottom_rail(world),
     }
-    for n, p in parts.items():
-        _report(n, p)
-        cq.exporters.export(p, os.path.join(out, n + ".stl"), tolerance=0.05, angularTolerance=0.2)
-        cq.exporters.export(p, os.path.join(out, n + ".step"))
+    for name, solid in prints.items():
+        if name != "bottom_rail":
+            _report(name, solid)
+        cq.exporters.export(solid, os.path.join(out, name + ".stl"),
+                            tolerance=0.05, angularTolerance=0.2)
+        cq.exporters.export(solid, os.path.join(out, name + ".step"))
+    for name in os.listdir(out):
+        stem, ext = os.path.splitext(name)
+        if ext.lower() in (".stl", ".step") and stem not in prints:
+            os.remove(os.path.join(out, name))
 
     asm = {}
     for i, x in enumerate((-FRAME_X, FRAME_X)):
-        asm[f"side_frame_{i}"] = sf.translate((x, 0, 0))
-    for i, y in enumerate(CROSSBAR_Y):
-        asm[f"crossbar_{i}"] = cb.translate((0, y, 0))
-    for i, x in enumerate((-70, 0, 70)):
-        asm[f"rail_{i}"] = rl.translate((x, 0, 0))
-    for n, p in asm.items():
-        cq.exporters.export(p, os.path.join(prev, n + ".stl"), tolerance=0.15, angularTolerance=0.4)
+        asm[f"side_frame_{i}"] = frame.translate((x, 0, 0))
+    for i, solid in enumerate(rails):
+        asm[f"bottom_rail_{i}"] = solid
+    asm["panel"] = box(-PW / 2, PW / 2, -PH / 2, PH / 2, 0, PT)
+    written = set()
+    for name, solid in asm.items():
+        cq.exporters.export(solid, os.path.join(prev, name + ".stl"),
+                            tolerance=0.12, angularTolerance=0.35)
+        written.add(name + ".stl")
+    for name in os.listdir(prev):
+        if name.lower().endswith(".stl") and name not in written:
+            os.remove(os.path.join(prev, name))
     print("wrote stl/ and preview/")
+
+
+if __name__ == "__main__":
+    write_outputs()

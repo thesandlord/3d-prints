@@ -1,52 +1,44 @@
 # Open-frame stand — 15.6" panel + LCD driver board + any SBC
 
-Two side frames hold the panel and act as the legs. Two crossbars drop into sockets on the
-frames and are pinned with printed lock bars. Three rails snap onto the crossbars and carry
-the boards. No screws, nuts, or heat-set inserts.
+The side frames are already printed. Leave them as they are. The only new parts are two
+bottom rails. Each one presses onto the foot of both frames. Boards screw down onto the
+rails.
+
+The rail is 238 mm long, inside the 359.5 mm panel, so it cannot hold the frames apart
+or stop the screen from seating.
 
 ## Measure first
 Edit the PARAMETERS at the top of `aio_frame.py` and run
 `/tmp/cqenv/bin/python aio_frame.py`.
 - `PW, PH, PT`: panel outer width × height × thickness. Nominal 359.5 × 223.8 × 6.0.
-- `FRAME_X`: side frames at ±110 mm. Keep the spines off the panel's rear PCB.
-- `CROSSBAR_Y`: crossbar heights, −20 and +80 mm from panel centre.
-- `TILT`: 12°. `FOOT`: 170 mm.
+- `FRAME_X`: side frames at ±110 mm. This matches the frames already printed.
+- `RAIL_LEN`: 238 mm. Keep it under the panel width.
+- `RAIL_B`: where the preview places the two rails, in millimetres back along the foot.
 
 ## Parts
 | File | Qty | Prints as |
 |---|---|---|
-| `side_frame.stl` | 2 | Flat, 229 × 196 × 26 mm. One per plate. |
-| `crossbar.stl` | 2 | Flat, 248 × 16 × 18 mm. Notch facing up. |
-| `lock.stl` | 4 | Flat, bump on top. |
-| `rail.stl` | 3 | Flat, saddle opening up. |
-| `board_clip.stl` | 6 | Flat, groove on the bed. |
+| `side_frame.stl` | 2 | Already printed. Flat, one per plate. |
+| `bottom_rail.stl` | 2 | Flat, 238 × 18 × 15 mm. Both fit on one plate. |
 
-PLA, 0.2 mm layers, 3 walls, 15% infill. The frames are the long prints. Everything else
-fits around them: plate 1 is one frame and both crossbars, plate 2 is the other frame,
-three rails, four locks, and six clips.
-
-The frames, crossbars, and rails from the screw-together version do not fit this joint.
-The sockets are part of the frame, so both frames are reprinted.
+PLA, 0.2 mm layers, 3 walls, 15% infill. Print the rail with the flat face on the bed and
+the socket walls pointing up.
 
 ## Assembly
-1. Stand both frames up, panel slots facing each other, feet pointing back.
-2. Drop one crossbar into the lower pair of sockets, then the other into the upper pair.
-   The rib in the floor of each socket sits in the pocket on the underside of the bar.
-   That sets the spacing. If a bar will not drop, the pocket is not over the rib.
-3. Push a lock into each socket from the **outer** face of the frame (the face pointing
-   away from the other frame), ramp up, until the ramp clicks out the inner face.
-   The head stays on the outside. To remove one, push the tip back toward the head.
-4. The panel can go in before or after the locks. Slide it in from the side, screen toward
-   the front lips. A strip of foam tape in the slots keeps it from rattling.
-5. Snap the three rails onto the crossbars from behind. They click over the beam and sit
-   in the notches on top, so you can slide them left and right in steps. Use two under the
-   driver board and the third under the SBC, or space all three under a wide board.
-6. Slide the board clips onto a rail from either end, tooth toward the notches on the cap.
-   Put a clip on each rail the board will use, at the same height. The slot is 2.4 mm,
-   so it takes a 1.2–2.0 mm board. Slide the board in from the side. Tall parts on the
-   board should face away from the rail.
-7. Tape or hot-glue the button board. Route the LVDS cable so it misses the rails.
+1. Stand both frames up, panel slots facing each other, feet pointing back. The screen
+   slides in from the side, toward the front lips. A strip of foam tape in the slots
+   keeps it from rattling.
+2. Press a rail down onto the bottom bar of both feet. The mouth is wider than the
+   foot, and the ribs tighten as the flat underside lands on the bar. Do the same with
+   the second rail.
+3. Slide the rails along the feet to the spacing the boards need. Keep them on the flat
+   run of the foot, forward of the heel. The preview shows them 55 mm apart.
+4. Screw the boards down through the holes. The holes are 3.4 mm, on an 8 mm grid, two
+   rows staggered by 4 mm. Use an M3 screw from above and a nut under the rail. An
+   M3×16 clears a 1.6 mm board plus the 8 mm bar.
+
+The drop-in sockets already moulded into the frames are left empty.
 
 ## Not verified
-- No test print of this joint yet.
+- No test print of this socket yet.
 - Panel dimensions are still estimates.
