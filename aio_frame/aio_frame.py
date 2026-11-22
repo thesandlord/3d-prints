@@ -1,9 +1,9 @@
 """
 Open-frame stand for a 15.6" panel + LCD driver + SBC.
 
-The side frames are already printed. The only new parts are two bottom rails.
-Each rail presses onto the foot of both frames and carries a grid of M3
-through holes, so boards screw down onto the rails.
+Two plain side frames hold the panel and stand on the feet. Two bottom rails
+press onto those feet and carry a grid of M3 through holes, so boards screw
+down onto the rails.
 
 Coordinates (assembly): X = width, Y = up the panel, Z = depth (Z=0 = panel front).
 The rails are built on the floor (world Y up, world Z back) and rotated into
@@ -27,18 +27,8 @@ FRAME_X = 110.0
 TILT = 12.0
 FOOT = 170.0
 BRACE_Y = -40.0
-CROSSBAR_Y = (-20.0, 80.0)
 
-# crossbar section and the lock that pins it
-BEAM_HY, BEAM_DZ = 9.0, 16.0       # 18 mm tall, 16 mm deep so the lock notch keeps a wall
-BAR_Y, BAR_Z = 4.2, 10.0           # lock shaft: thin enough to spring, wide enough to grip
-HOLE_Y, HOLE_Z = 4.9, 11.0         # the 1.3 mm bump on top clicks past HOLE_Y
-BUMP = 1.3
-BOSS_HY = 14.0
-# Boss grows to one side of the 12 mm plate so that face sits on the bed.
-BOSS_X0, BOSS_X1 = -FRAME_T / 2 - 14.0, FRAME_T / 2
-
-# Bottom rails, the only parts still to print. Sockets press onto the foot sole,
+# Bottom rails. Sockets press onto the foot sole,
 # which is the 12 mm plate under the lightening hole (8 mm tall).
 SOLE_H = 8.0
 BAR_T = 8.0
@@ -60,12 +50,6 @@ RAIL_B = (50.0, 105.0)    # preview positions, mm back along the foot
 # ----------------------------------------------------------------- DERIVED
 GAP = PT + FOAM
 ZS0, ZS1 = GAP, GAP + SPINE
-BEAM_Z0 = ZS1 + 1.6
-BEAM_Z1 = BEAM_Z0 + BEAM_DZ
-# lock sits in the upper half of the beam so material remains underneath it
-LOCK_Y = 3.0
-PIN_Z = (BEAM_Z0 + BEAM_Z1) / 2
-BEAM_HX = 124.0
 YT = PH / 2 + FIT
 T = math.radians(TILT)
 CT, ST = math.cos(T), math.sin(T)
@@ -130,22 +114,8 @@ def poly_solid(poly, plane, t):
 
 
 def side_frame():
-    """Panel slot and leg. Each crossbar height has a drop-in socket and a lock hole."""
-    s = poly_solid(side_profile(), "YZ", FRAME_T)
-    for y0 in CROSSBAR_Y:
-        s = s.union(box(BOSS_X0, BOSS_X1, y0 - BOSS_HY, y0 + BOSS_HY, ZS1 - 3.0, BEAM_Z1 + 3.0))
-        # slot the beam drops into, open at the top
-        s = s.cut(box(BOSS_X0 - 1, BOSS_X1 + 1,
-                      y0 - BEAM_HY - 0.45, y0 + BOSS_HY + 1,
-                      BEAM_Z0 - 0.45, BEAM_Z1 + 0.45))
-        # rib in the floor. The pocket in the beam lands on it and stops the bar sliding.
-        s = s.union(box(-4.0, 4.0, y0 - BEAM_HY - 0.45, y0 - BEAM_HY + 2.6,
-                        PIN_Z - 3.0, PIN_Z + 3.0))
-        # lock hole through the side walls. Axis is the frame thickness, so it prints vertical.
-        s = s.cut(box(BOSS_X0 - 1, BOSS_X1 + 1,
-                      y0 + LOCK_Y - HOLE_Y / 2, y0 + LOCK_Y + HOLE_Y / 2,
-                      PIN_Z - HOLE_Z / 2, PIN_Z + HOLE_Z / 2))
-    return s
+    """Panel slot and leg. A plain 12 mm plate, with no crossbar brackets."""
+    return poly_solid(side_profile(), "YZ", FRAME_T)
 
 
 def floor_height():

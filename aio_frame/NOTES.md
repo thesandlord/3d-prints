@@ -1,8 +1,7 @@
 # Open-frame stand — 15.6" panel + LCD driver board + any SBC
 
-The side frames are already printed. Leave them as they are. The only new parts are two
-bottom rails. Each one presses onto the foot of both frames. Boards screw down onto the
-rails.
+Two plain side frames hold the panel. Two bottom rails press onto the feet. Boards
+screw down onto the rails. The frames have no crossbar brackets.
 
 The rail is 238 mm long, inside the 359.5 mm panel, so it cannot hold the frames apart
 or stop the screen from seating.
@@ -11,14 +10,14 @@ or stop the screen from seating.
 Edit the PARAMETERS at the top of `aio_frame.py` and run
 `/tmp/cqenv/bin/python aio_frame.py`.
 - `PW, PH, PT`: panel outer width × height × thickness. Nominal 359.5 × 223.8 × 6.0.
-- `FRAME_X`: side frames at ±110 mm. This matches the frames already printed.
+- `FRAME_X`: side frames at ±110 mm. The rails are sized to that spacing.
 - `RAIL_LEN`: 238 mm. Keep it under the panel width.
 - `RAIL_B`: where the preview places the two rails, in millimetres back along the foot.
 
 ## Parts
 | File | Qty | Prints as |
 |---|---|---|
-| `side_frame.stl` | 2 | Already printed. Flat, one per plate. |
+| `side_frame.stl` | 2 | Flat, 229 × 196 × 12 mm. One per plate. |
 | `bottom_rail.stl` | 2 | Flat, 238 × 18 × 15 mm. Both fit on one plate. |
 
 PLA, 0.2 mm layers, 3 walls, 15% infill. Print the rail with the flat face on the bed and
@@ -36,8 +35,6 @@ the socket walls pointing up.
 4. Screw the boards down through the holes. The holes are 3.4 mm, on an 8 mm grid, two
    rows staggered by 4 mm. Use an M3 screw from above and a nut under the rail. An
    M3×16 clears a 1.6 mm board plus the 8 mm bar.
-
-The drop-in sockets already moulded into the frames are left empty.
 
 ## Not verified
 - No test print of this socket yet.
