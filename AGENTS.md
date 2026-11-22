@@ -1,5 +1,13 @@
 # 3d-prints
 
+## Design
+
+Print every part. Use a printed joint instead of screws, nuts, heat-set inserts, or other bought hardware.
+
+Fit a design on one X2D build plate when you can. The plate is 256 × 256 mm.
+
+Prefer the simpler design. Add a part, a joint, or a feature only when the object needs it.
+
 ## Preview an assembly
 
 Use the shared viewer before describing how a model looks. Pick a camera that shows the depth of the part. A straight-on view often hides it.
