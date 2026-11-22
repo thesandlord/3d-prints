@@ -1,0 +1,20 @@
+{
+  "title": "Smock dryer",
+  "hud": "Up is the stand. Pack is the hanger and the feet inside the lower tube.",
+  "camera": {"yaw": 0.6, "pitch": 0.35, "dist": 1100},
+  "groups": {
+    "up": "up_",
+    "pack": "pack_"
+  },
+  "defaultGroup": "up",
+  "colors": {
+    "spine": [0.22, 0.22, 0.24],
+    "hanger": [0.62, 0.78, 0.28],
+    "foot": [0.78, 0.32, 0.26]
+  },
+  "views": {
+    "up": {"yaw": 0.7, "pitch": 0.28, "dist": 1200},
+    "pack": {"yaw": 0.5, "pitch": 0.45, "dist": 700},
+    "top": {"yaw": 0.4, "pitch": 1.05, "dist": 280, "center": [0, 400, 0]}
+  }
+}
